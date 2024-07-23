@@ -155,7 +155,7 @@
 
 .active .autocomplete_secondary {
     opacity: 0.6;
-    color: black;
+    color: hsl(0, 0%, 0%);
     text-decoration: underline;
 }
 
