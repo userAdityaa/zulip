@@ -20,11 +20,15 @@ type Payload = {
     preview: string;
     source: string;
     url: string;
+    original_width_px: number | undefined;
+    original_height_px: number | undefined;
 };
 
 let is_open = false;
-// the asset map is a map of all retrieved images and YouTube videos that are
-// memoized instead of being looked up multiple times.
+
+// The asset map is a map of all retrieved images and YouTube videos that are memoized instead of
+// being looked up multiple times.  It is keyed by the asset's "canonical URL," which is likely the
+// `src` used in the message feed, but for thumbnailed images is the full-resolution original URL.
 const asset_map = new Map<string, Payload>();
 
 export class PanZoomControl {
@@ -200,7 +204,15 @@ export function clear_for_testing(): void {
     asset_map.clear();
 }
 
-export function render_lightbox_media_list(preview_source: string): void {
+export function canonical_url_of_media(media: HTMLElement): string {
+    let media_src = media.getAttribute("src");
+    if (!media_src || media_src.startsWith("/user_uploads/thumbnail/")) {
+        media_src = media.parentElement!.getAttribute("href")!;
+    }
+    return media_src;
+}
+
+export function render_lightbox_media_list(displayed_source: string): void {
     if (!is_open) {
         const media_list = $(
             ".focused-message-list .message_inline_image img, .focused-message-list .message_inline_video video",
@@ -208,17 +220,22 @@ export function render_lightbox_media_list(preview_source: string): void {
         const $media_list = $("#lightbox_overlay .image-list").empty();
 
         for (const media of media_list) {
-            const unverified_src = media.getAttribute("src")!;
-            const src = util.is_valid_url(unverified_src) ? unverified_src : "";
-            const className = preview_source === src ? "image selected" : "image";
+            const src = canonical_url_of_media(media);
+            const className = displayed_source === src ? "image selected" : "image";
             const is_video = media.tagName === "VIDEO";
+
+            // We parse the data for each image to show in the list,
+            // while we still have its original DOM element handy, so
+            // that navigating within the list only needs the `src`
+            // attribute used to construct the node object above.
+            const payload = parse_media_data(media);
 
             let $node: JQuery;
             if (is_video) {
                 $node = $("<div>")
                     .addClass(className)
                     .addClass("lightbox_video")
-                    .attr("data-src", src);
+                    .attr("data-url", payload.url);
 
                 const $video = $("<video>");
                 $video.attr("src", src);
@@ -228,29 +245,39 @@ export function render_lightbox_media_list(preview_source: string): void {
             } else {
                 $node = $("<div>")
                     .addClass(className)
-                    .attr("data-src", src)
-                    .css({backgroundImage: `url(${CSS.escape(src)})`});
+                    .attr("data-url", payload.url)
+                    .css({
+                        backgroundImage: `url(${CSS.escape(payload.preview || payload.source)})`,
+                    });
             }
 
             $media_list.append($node);
-
-            // We parse the data for each image to show in the list,
-            // while we still have its original DOM element handy, so
-            // that navigating within the list only needs the `src`
-            // attribute used to construct the node object above.
-            parse_media_data(media);
         }
     }
 }
 
 function display_image(payload: Payload): void {
-    render_lightbox_media_list(payload.preview);
+    render_lightbox_media_list(payload.source);
 
     $(".player-container, .video-player").hide();
     $(".image-preview, .media-actions, .media-description, .download, .lightbox-zoom-reset").show();
 
     const $img_container = $("#lightbox_overlay .image-preview > .zoom-element");
-    const $img = $("<img>").attr("src", payload.source);
+    const $img = $("<img>");
+    if (payload.preview && payload.original_width_px && payload.original_height_px) {
+        $img.attr("src", payload.preview);
+        $img.attr("width", payload.original_width_px);
+        $img.attr("height", payload.original_height_px);
+        // srcset contains the reference to the original image,
+        // and will be preferred over the src image when available
+        $img.attr("srcset", `${payload.source} ${payload.original_width_px}w`);
+        $img.attr("sizes", "100vw");
+    } else {
+        // this could be just assigned to src, but srcset is used here
+        // for consistency
+        $img.attr("srcset", `${payload.source} ${payload.original_width_px}w`);
+        $img.attr("sizes", "100vw");
+    }
     $img_container.empty();
     $img_container.append($img).show();
 
@@ -282,7 +309,7 @@ function display_image(payload: Payload): void {
 }
 
 function display_video(payload: Payload): void {
-    render_lightbox_media_list(payload.preview);
+    render_lightbox_media_list(payload.source);
 
     $(
         "#lightbox_overlay .image-preview, .media-description, .download, .lightbox-zoom-reset, .video-player",
@@ -357,29 +384,9 @@ export function build_open_media_function(
     }
 
     return function ($media: JQuery): void {
-        // if the asset_map already contains the metadata required to display the
-        // asset, just recall that metadata.
-        let $preview_src = $media.attr("src")!;
-        let payload = asset_map.get($preview_src);
-        if (payload === undefined) {
-            if ($preview_src.endsWith("&size=full")) {
-                // while fetching an image for canvas, `src` attribute supplies
-                // full-sized image instead of thumbnail, so we have to replace
-                // `size=full` with `size=thumbnail`.
-                //
-                // TODO: This is a hack to work around the fact that for
-                // the lightbox canvas, the `src` is the data-fullsize-src
-                // for the image, not the original thumbnail used to open
-                // the lightbox.  A better fix will be to check a
-                // `data-thumbnail-src` attribute that we add to the
-                // canvas elements.
-                $preview_src = $preview_src.slice(0, -"full".length) + "thumbnail";
-                payload = asset_map.get($preview_src);
-            }
-            if (payload === undefined) {
-                payload = parse_media_data($media[0]!);
-            }
-        }
+        // This is used both for clicking on media in the messagelist, as well as clicking on images
+        // in the media list under the lightbox when it is open.
+        const payload = parse_media_data($media[0]!);
 
         assert(payload !== undefined);
         if (payload.type.match("-video")) {
@@ -461,15 +468,15 @@ export function show_from_selected_message(): void {
 
 // retrieve the metadata from the DOM and store into the asset_map.
 export function parse_media_data(media: HTMLElement): Payload {
-    const $media = $(media);
-    const preview_src = $media.attr("src")!;
-
-    if (asset_map.has(preview_src)) {
-        // check if media's data is already present in asset_map.
-        const payload = asset_map.get(preview_src);
+    const canonical_url = canonical_url_of_media(media);
+    if (asset_map.has(canonical_url)) {
+        // Use the cached value
+        const payload = asset_map.get(canonical_url);
         assert(payload !== undefined);
         return payload;
     }
+
+    const $media = $(media);
 
     // if wrapped in the .youtube-video class, it will be length = 1, and therefore
     // cast to true.
@@ -485,6 +492,23 @@ export function parse_media_data(media: HTMLElement): Payload {
     let type: string;
     let source;
     const url = $parent.attr("href");
+
+    let preview_src = $media.attr("src");
+    const is_loading_placeholder = $media.hasClass("image-loading-placeholder");
+    if (is_loading_placeholder) {
+        preview_src = "";
+    }
+    const original_dimensions = $media.attr("data-original-dimensions");
+    let original_width_px;
+    let original_height_px;
+    if (original_dimensions) {
+        const found = original_dimensions.match(/^(\d+)x(\d+)$/);
+        if (found) {
+            original_width_px = Number(found[1]);
+            original_height_px = Number(found[2]);
+        }
+    }
+
     if (is_inline_video) {
         type = "inline-video";
         // Render video from original source to reduce load on our own servers.
@@ -510,7 +534,7 @@ export function parse_media_data(media: HTMLElement): Payload {
         if ($media.attr("data-src-fullsize")) {
             source = $media.attr("data-src-fullsize");
         } else {
-            source = preview_src;
+            source = url;
         }
     }
     let sender_full_name;
@@ -530,12 +554,16 @@ export function parse_media_data(media: HTMLElement): Payload {
         user: sender_full_name,
         title: $parent.attr("aria-label") ?? $parent.attr("href"),
         type,
-        preview: util.is_valid_url(preview_src) ? preview_src : "",
+        preview: preview_src && util.is_valid_url(preview_src) ? preview_src : "",
+        original_width_px,
+        original_height_px,
         source: source && util.is_valid_url(source) ? source : "",
         url: url && util.is_valid_url(url) ? url : "",
     };
 
-    asset_map.set(preview_src, payload);
+    if (!is_loading_placeholder) {
+        asset_map.set(canonical_url, payload);
+    }
     return payload;
 }
 
@@ -580,7 +608,7 @@ export function initialize(): void {
 
     $("#main_div, #compose .preview_content").on(
         "click",
-        ".message_inline_image:not(.message_inline_video) a",
+        ".message_inline_image:not(.message_inline_video) a, .message_inline_animated_image_still",
         function (e) {
             // prevent the link from opening in a new page.
             e.preventDefault();
@@ -609,11 +637,11 @@ export function initialize(): void {
         const is_video = $(this).hasClass("lightbox_video");
         if (is_video) {
             $original_media_element = $(
-                `.message_row video[src='${CSS.escape($(this).attr("data-src")!)}']`,
+                `.message_row a[href='${CSS.escape($(this).attr("data-url")!)}'] video`,
             );
         } else {
             $original_media_element = $(
-                `.message_row img[src='${CSS.escape($(this).attr("data-src")!)}']`,
+                `.message_row a[href='${CSS.escape($(this).attr("data-url")!)}'] img`,
             );
         }
 

@@ -1,6 +1,6 @@
 import os
 
-ZULIP_VERSION = "9.0-dev+git"
+ZULIP_VERSION = "9.0-beta1+git"
 
 # Add information on number of commits and commit hash to version, if available
 zulip_git_version_file = os.path.join(
@@ -33,7 +33,9 @@ DESKTOP_WARNING_VERSION = "5.9.3"
 # Changes should be accompanied by documentation explaining what the
 # new level means in api_docs/changelog.md, as well as "**Changes**"
 # entries in the endpoint's documentation in `zulip.yaml`.
-API_FEATURE_LEVEL = 266
+
+API_FEATURE_LEVEL = 276  # Last bumped for data-original-dimensions
+
 
 # Bump the minor PROVISION_VERSION to indicate that folks should provision
 # only when going from an old version of the code to a newer version. Bump
@@ -48,4 +50,4 @@ API_FEATURE_LEVEL = 266
 #   historical commits sharing the same major version, in which case a
 #   minor version bump suffices.
 
-PROVISION_VERSION = (285, 0)  # bumped 2024-06-27 for upgrading Python requirements
+PROVISION_VERSION = (287, 0)  # bumped 2024-07-17 to rebuild emoji_names
