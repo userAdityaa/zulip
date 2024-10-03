@@ -27,6 +27,7 @@
 
 .sidebar-topic-check,
 .topic-markers-and-unreads {
+.topic-markers-and-unreads {
     cursor: pointer;
 }
 
@@ -197,6 +198,10 @@
             --left-sidebar-vdots-width
         )
         0;
+        minmax(0, max-content) minmax(0, max-content) var(
+            --left-sidebar-vdots-width
+        )
+        0;
     grid-template-rows: var(--line-height-sidebar-row-prominent);
     cursor: pointer;
     white-space: nowrap;
@@ -223,6 +228,8 @@
         grid-area: row-content;
     }
 
+    .heading-markers-and-unreads {
+        grid-area: markers-and-unreads;
     .heading-markers-and-unreads {
         grid-area: markers-and-unreads;
         display: flex;
@@ -444,6 +451,7 @@
 ul.filters {
     list-style-type: none;
     margin-left: 0;
+    line-height: var(--line-height-sidebar-row-prominent);
     line-height: var(--line-height-sidebar-row-prominent);
 
     .sidebar-topic-name,
@@ -761,6 +769,11 @@ li.top_left_scheduled_messages {
             max-content
         )
         minmax(0, max-content) 0 0;
+        var(--left-sidebar-icon-content-gap) minmax(0, 1fr) minmax(
+            0,
+            max-content
+        )
+        minmax(0, max-content) 0 0;
 
     .filter-icon {
         grid-area: starting-anchor-element;
@@ -777,22 +790,16 @@ li.top_left_scheduled_messages {
 
     .unread_count {
         grid-area: markers-and-unreads;
-        /* Extra margin for unreads. */
-        margin-right: var(--left-sidebar-unread-offset);
-
-        &:empty {
-            margin-right: 0;
-        }
     }
 }
 
 .top_left_starred_messages {
     &.hide_starred_message_count {
         .masked_unread_count {
-            display: flex;
+            display: block;
             grid-area: markers-and-unreads;
-            /* Extra margin for unreads. */
-            margin-right: var(--left-sidebar-unread-offset);
+            /* Adding margin-right aligns the .masked_unread_count with the rest of the masked unread counts in the channel list. */
+            margin-right: var(--masked-unread-count-margin-right);
         }
 
         .unread_count {
@@ -886,6 +893,7 @@ li.top_left_scheduled_messages {
        (which alters the box size) or `margin` (which notoriously bleeds outside
        of the element it's defined on). */
     grid-template-areas: "starting-offset starting-anchor-element icon-content-gap row-content controls markers-and-unreads ending-anchor-element ending-offset";
+    grid-template-areas: "starting-offset starting-anchor-element icon-content-gap row-content controls markers-and-unreads ending-anchor-element ending-offset";
 }
 
 .top_left_row {
@@ -896,6 +904,9 @@ li.top_left_scheduled_messages {
     /* The row grid for the outer .top_left_row
        is chiefly for lefthand spacing and placing
        the inner row content and vdots. */
+    grid-template-columns:
+        0 0 0 minmax(0, 1fr) 0 0 var(--left-sidebar-vdots-width)
+        0;
     grid-template-columns:
         0 0 0 minmax(0, 1fr) 0 0 var(--left-sidebar-vdots-width)
         0;
@@ -921,15 +932,19 @@ li.top_left_scheduled_messages {
     grid-template-areas:
         "starting-offset starting-anchor-element icon-content-gap row-content controls   markers-and-unreads ending-anchor-element ending-offset"
         ".               .                       filter-box       filter-box  filter-box filter-box          filter-box            .            ";
+        "starting-offset starting-anchor-element icon-content-gap row-content controls   markers-and-unreads ending-anchor-element ending-offset"
+        ".               .                       filter-box       filter-box  filter-box filter-box          filter-box            .            ";
 }
 
 #views-label-container {
     margin-right: var(--left-sidebar-right-margin);
     grid-template-columns:
         0 var(--left-sidebar-header-icon-toggle-width) 0 minmax(0, 0.5fr) 0 minmax(
+        0 var(--left-sidebar-header-icon-toggle-width) 0 minmax(0, 0.5fr) 0 minmax(
             0,
             1fr
         )
+        var(--left-sidebar-vdots-width) 0;
         var(--left-sidebar-vdots-width) 0;
     grid-template-rows: 28px;
     cursor: pointer;
@@ -956,6 +971,7 @@ li.top_left_scheduled_messages {
         /* Give the sidebar title through the end of the markers
            area, if needed. */
         .left-sidebar-title {
+            grid-column: row-content-start / markers-and-unreads-end;
             grid-column: row-content-start / markers-and-unreads-end;
         }
     }
@@ -1001,6 +1017,7 @@ li.top_left_scheduled_messages {
 
     #left-sidebar-navigation-list-condensed {
         margin: 0;
+        grid-area: markers-and-unreads;
         grid-area: markers-and-unreads;
     }
 
@@ -1048,6 +1065,8 @@ li.top_left_scheduled_messages {
         )
         minmax(0, max-content)
         var(--left-sidebar-vdots-width) 0;
+        minmax(0, max-content)
+        var(--left-sidebar-vdots-width) 0;
     white-space: nowrap;
 
     .stream-privacy {
@@ -1087,6 +1106,8 @@ li.top_left_scheduled_messages {
         0 var(--left-sidebar-icon-column-width) var(
             --left-sidebar-icon-content-gap
         )
+        minmax(0, 1fr) minmax(0, max-content) minmax(0, max-content)
+        var(--left-sidebar-vdots-width) 0;
         minmax(0, 1fr) minmax(0, max-content) minmax(0, max-content)
         var(--left-sidebar-vdots-width) 0;
 }
@@ -1185,18 +1206,6 @@ li.top_left_scheduled_messages {
        bracket's bottom line. Its value must less than
        the z-index set on the #streams_header selector. */
     z-index: 1;
-}
-
-.left-sidebar-controls {
-    grid-area: controls;
-    display: grid;
-    /* We won't know in advance how many controls a given
-       row has, but this allows grid to generate as many
-       as needed, sized to a shared icon width. */
-    grid-auto-columns: var(--left-sidebar-header-icon-width);
-    grid-template-rows: var(--line-height-sidebar-row-prominent);
-    place-content: stretch stretch;
-    margin-right: 1px;
 }
 
 .stream-markers-and-unreads,
@@ -1417,9 +1426,11 @@ li.topic-list-item {
             --left-sidebar-icon-column-width
         )
         var(--left-sidebar-icon-content-gap) minmax(0, 1fr) [action-heading-end] 0 minmax(
+        var(--left-sidebar-icon-content-gap) minmax(0, 1fr) [action-heading-end] 0 minmax(
             0,
             max-content
         )
+        var(--left-sidebar-vdots-width) 0;
         var(--left-sidebar-vdots-width) 0;
     grid-template-rows: [action-heading-start] auto [action-heading-end];
 
@@ -1448,6 +1459,7 @@ li.topic-list-item {
     }
 
     .unread_count {
+        grid-area: markers-and-unreads;
         grid-area: markers-and-unreads;
         /* TODO: This is an alternative method
            for presenting a 16px-tall unread
@@ -1500,6 +1512,9 @@ li.topic-list-item {
         0 0 minmax(0, 1fr) 0
         max-content 0 var(--left-sidebar-vdots-width)
         [topics-content-area-end] var(--left-sidebar-right-margin);
+        0 0 minmax(0, 1fr) 0
+        max-content 0 var(--left-sidebar-vdots-width)
+        [topics-content-area-end] var(--left-sidebar-right-margin);
     grid-template-rows:
         [topics-content-area-start] var(--line-height-sidebar-row-prominent)
         [topics-content-area-end];
@@ -1528,12 +1543,6 @@ li.topic-list-item {
 
     .unread_count {
         grid-area: markers-and-unreads;
-        /* Extra margin for unreads. */
-        margin-right: var(--left-sidebar-unread-offset);
-
-        &:empty {
-            margin-right: 0;
-        }
     }
 }
 
@@ -1543,8 +1552,7 @@ li.topic-list-item {
             0,
             max-content
         )
-        minmax(0, max-content) var(--left-sidebar-vdots-width)
-        0;
+        minmax(17px, max-content) var(--left-sidebar-vdots-width) 0;
     /* Keep the stream-search area rows collapsed. */
     grid-template-rows: var(--line-height-sidebar-row-prominent) 0 0;
     cursor: pointer;
@@ -1575,6 +1583,8 @@ li.topic-list-item {
         grid-area: row-content;
     }
 
+    .heading-markers-and-unreads {
+        grid-area: markers-and-unreads;
     .heading-markers-and-unreads {
         grid-area: markers-and-unreads;
         height: 100%;
@@ -1738,6 +1748,8 @@ li.topic-list-item {
     grid-template-columns:
         var(--left-sidebar-toggle-width-offset) 0 0 minmax(0, 1fr) 0
         minmax(var(--left-sidebar-vdots-width), max-content) 0 0;
+        var(--left-sidebar-toggle-width-offset) 0 0 minmax(0, 1fr) 0
+        minmax(var(--left-sidebar-vdots-width), max-content) 0 0;
     margin-right: var(--left-sidebar-right-margin);
 
     /* With markers and controls now sized the same
@@ -1746,6 +1758,7 @@ li.topic-list-item {
        additional logged-out icons be added in the
        future), let's center the icon in that area,
        just like vdots would be. */
+    .heading-markers-and-unreads {
     .heading-markers-and-unreads {
         justify-content: center;
     }
@@ -1863,6 +1876,7 @@ li.topic-list-item {
 
     .direct-messages-search-section {
         display: flex;
+        grid-column: row-content / markers-and-unreads;
         grid-column: row-content / markers-and-unreads;
         margin-top: 5px;
         margin-bottom: 5px;
