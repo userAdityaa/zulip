@@ -14,6 +14,7 @@ import * as compose_reply from "./compose_reply.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
+import {set_upload_pasted_file_callback} from "./copy_and_paste.ts";
 import {$t} from "./i18n.ts";
 import * as message_lists from "./message_lists.ts";
 import * as rows from "./rows.ts";
@@ -269,6 +270,12 @@ export let upload_files = (
 export function rewire_upload_files(value: typeof upload_files): void {
     upload_files = value;
 }
+
+export function upload_pasted_file(pasted_file: File): void {
+    upload_files(compose_upload_object, compose_config, [pasted_file]);
+}
+
+set_upload_pasted_file_callback(upload_pasted_file);
 
 // Borrowed from tus-js-client code at
 // https://github.com/tus/tus-js-client/blob/ca63ba254ea8766438b9d422f6f94284911f1fa5/lib/index.d.ts#L79
