@@ -562,7 +562,10 @@ export function initialize_everything(state_data) {
     add_stream_options_popover.initialize();
     click_handlers.initialize();
     scheduled_messages_overlay_ui.initialize();
-    compose_paste.initialize();
+    compose_paste.initialize({
+        min_paste_size_for_file_treatment: upload.MINIMUM_PASTE_SIZE_FOR_FILE_TREATMENT,
+        upload_pasted_file: upload.upload_pasted_file,
+    });
     overlays.initialize();
     invite.initialize();
     message_view_header.initialize();

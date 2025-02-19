@@ -23,6 +23,8 @@ let drag_drop_img: HTMLElement | null = null;
 let compose_upload_object: Uppy<Meta, TusBody>;
 const upload_objects_by_message_edit_row = new Map<number, Uppy<Meta, TusBody>>();
 
+export const MINIMUM_PASTE_SIZE_FOR_FILE_TREATMENT = 2000;
+
 export function compose_upload_cancel(): void {
     compose_upload_object.cancelAll();
 }
@@ -268,6 +270,10 @@ export let upload_files = (
 
 export function rewire_upload_files(value: typeof upload_files): void {
     upload_files = value;
+}
+
+export function upload_pasted_file(pasted_file: File): void {
+    upload_files(compose_upload_object, compose_config, [pasted_file]);
 }
 
 // Borrowed from tus-js-client code at
