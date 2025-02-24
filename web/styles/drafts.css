@@ -71,4 +71,49 @@
            the checkbox icon) will work. */
         width: 15px;
     }
+
+    .outbox-selection-checkbox { 
+        margin-top: 5px;
+        /* Required to make sure that the checkbox icon stays inside
+            the grid. Any value greater than 13px (original width of
+            the checkbox icon) will work. */
+        width: 15px;
+    }
+}
+
+.drafts-container {
+    .tab-container { 
+        padding: 0 20px;
+    }
+
+    .tab-switcher {
+        display: flex;
+        margin-top: 45px;
+        margin-bottom: 10px;
+        overflow-x: auto;
+    }
+
+    .ind-tab {
+        flex: 1;
+        min-width: 150px;
+        max-width: 100%;
+        text-align: center;
+        padding: 6px 12px;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 600px) {
+        .ind-tab {
+            min-width: 120px;
+            font-size: 14px;
+        }
+    }
+}
+
+.tab-content.active { 
+    display: block;
+}
+
+.tab-content { 
+    display: none;
 }

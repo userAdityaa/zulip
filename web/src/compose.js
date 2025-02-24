@@ -28,6 +28,9 @@ import * as zcommand from "./zcommand.ts";
 
 // Docs: https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html
 
+export const failed_message_queue = [];
+let retry_failed = false;
+
 export function clear_invites() {
     $(
         `#compose_banners .${CSS.escape(compose_banner.CLASSNAMES.recipient_not_subscribed)}`,
@@ -132,15 +135,13 @@ export function clear_compose_box() {
     compose_banner.clear_uploads();
     compose_ui.hide_compose_spinner();
     scheduled_messages.reset_selected_schedule_timestamp();
-    $(".compose_control_button_container:has(.needs-empty-compose)").removeClass(
-        "disabled-on-hover",
-    );
+    $(".compose_control_button_container:has(.add-poll)").removeClass("disabled-on-hover");
 }
 
 export function send_message_success(request, data) {
     if (!request.locally_echoed) {
         clear_compose_box();
-    }
+    }   
 
     echo.reify_message_id(request.local_id, data.id);
     drafts.draft_model.deleteDraft(request.draft_id);
@@ -161,6 +162,14 @@ export function send_message_success(request, data) {
             compose_notifications.notify_unmute(muted_narrow, request.stream_id, request.topic);
         }
     }
+}
+
+export function remove_failed_message(message) { 
+    if(!message) { 
+        return;
+    }
+    
+    failed_message_queue = failed_message_queue.filter((msg => msg.id != message.id));
 }
 
 export let send_message = (request = create_message_object()) => {
@@ -197,11 +206,44 @@ export let send_message = (request = create_message_object()) => {
         // loc-1, loc-2, loc-3,etc.
         locally_echoed = false;
         local_id = sent_messages.get_new_local_id();
-    }
+    };
 
     request.local_id = local_id;
     request.locally_echoed = locally_echoed;
     request.resend = false;
+
+    function retry_failed_messages() {
+        if (failed_message_queue.length === 0) { 
+            retry_failed = false;
+            return;
+        }
+    
+        retry_failed = true; 
+        const message = failed_message_queue[0];
+    
+        const is_message_deleted = echo.delete_message_container.some(
+            deleted_message => {
+                return deleted_message.local_id === message.local_id;
+            }
+        );
+    
+        if (is_message_deleted) { 
+            failed_message_queue.shift(); 
+            retry_failed_messages(); 
+            return;
+        }
+    
+        message.resend = true;
+    
+        transmit.send_message(message, (data) => {
+            send_message_success(message, data);
+    
+            failed_message_queue.shift();
+            retry_failed_messages();
+        }, () => {
+            setTimeout(retry_failed_messages, 10000);
+        });
+    }
 
     function success(data) {
         send_message_success(request, data);
@@ -239,19 +281,29 @@ export let send_message = (request = create_message_object()) => {
             compose_ui.hide_compose_spinner();
             return;
         }
-
-        echo.message_send_error(message.id, response);
-
         // We might not have updated the draft count because we assumed the
         // message would send. Ensure that the displayed count is correct.
         drafts.sync_count();
 
         const draft = drafts.draft_model.getDraft(request.draft_id);
-        draft.is_sending_saving = false;
-        drafts.draft_model.editDraft(request.draft_id, draft);
+
+        if (!draft) {
+            return;
+        }
+
+        message.content = request.content;
+        draft.message = message;
+        echo.message_send_error(message.id, response);
+        drafts.draft_model.editDraft(message.draft_id, draft);
+        // failed_message_queue.push(message);
+
+        // if(!retry_failed) { 
+        //     retry_failed_messages();
+        // }
     }
 
     transmit.send_message(request, success, error);
+
     server_events.assert_get_events_running(
         "Restarting get_events because it was not running during send",
     );
@@ -268,10 +320,10 @@ export function rewire_send_message(value) {
     send_message = value;
 }
 
-export function handle_enter_key_with_preview_open(cmd_or_ctrl_pressed = false) {
+export function handle_enter_key_with_preview_open(ctrl_pressed = false) {
     if (
-        (user_settings.enter_sends && !cmd_or_ctrl_pressed) ||
-        (!user_settings.enter_sends && cmd_or_ctrl_pressed)
+        (user_settings.enter_sends && !ctrl_pressed) ||
+        (!user_settings.enter_sends && ctrl_pressed)
     ) {
         // If this enter should send, we attempt to send the message.
         finish();
@@ -370,11 +422,7 @@ function schedule_message_to_custom_date() {
         clear_compose_box();
         const new_row_html = render_success_message_scheduled_banner({
             scheduled_message_id: data.scheduled_message_id,
-            minimum_scheduled_message_delay_minutes:
-                scheduled_messages.MINIMUM_SCHEDULED_MESSAGE_DELAY_SECONDS / 60,
             deliver_at,
-            minimum_scheduled_message_delay_minutes_note:
-                scheduled_messages.show_minimum_scheduled_message_delay_minutes_note,
         });
         compose_banner.clear_message_sent_banners();
         compose_banner.append_compose_banner_to_banner_list($(new_row_html), $banner_container);
@@ -389,9 +437,6 @@ function schedule_message_to_custom_date() {
             $banner_container,
             $("textarea#compose-textarea"),
         );
-        const draft = drafts.draft_model.getDraft(draft_id);
-        draft.is_sending_saving = false;
-        drafts.draft_model.editDraft(draft_id, draft);
     };
 
     channel.post({
@@ -400,8 +445,4 @@ function schedule_message_to_custom_date() {
         success,
         error,
     });
-}
-
-export function is_topic_input_focused() {
-    return $("#stream_message_recipient_topic").is(":focus");
 }

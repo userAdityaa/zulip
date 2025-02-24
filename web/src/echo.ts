@@ -7,11 +7,9 @@ import render_message_controls_failed_msg from "../templates/message_controls_fa
 
 import * as alert_words from "./alert_words.ts";
 import * as blueslip from "./blueslip.ts";
-import * as browser_history from "./browser_history.ts";
 import * as compose_notifications from "./compose_notifications.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as echo_state from "./echo_state.ts";
-import * as hash_util from "./hash_util.ts";
 import * as local_message from "./local_message.ts";
 import * as markdown from "./markdown.ts";
 import * as message_events_util from "./message_events_util.ts";
@@ -34,6 +32,8 @@ import type {TopicLink} from "./types.ts";
 import * as util from "./util.ts";
 
 // Docs: https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html
+
+export const delete_message_container: Message[] = [];
 
 type ServerMessage = RawMessage & {local_id?: string};
 
@@ -148,7 +148,7 @@ function failed_message_success(message_id: number): void {
     show_failed_message_success(message_id);
 }
 
-function resend_message(
+export function resend_message(
     message: Message,
     $row: JQuery,
     {
@@ -181,10 +181,16 @@ function resend_message(
 
         // Resend succeeded, so mark as no longer failed
         failed_message_success(message_id);
+
+        $row.remove();
     }
 
     function on_error(response: string, _server_error_code: string): void {
-        message_send_error(message.id, response);
+        let message_id; 
+        if(message.local_id) {
+            message_id = parseFloat(message.local_id);
+        }
+        message_send_error(message_id!, response);
         setTimeout(() => {
             hide_retry_spinner($row);
         }, 300);
@@ -312,7 +318,7 @@ export let try_deliver_locally = (
     // message to be locally echoed but not appear in the current
     // view; this is useful to ensure it will be visible in other
     // views that we might navigate to before we get a response from
-    // the server.
+    // the server. 
     if (
         message_request.type === "private" &&
         message_request.to_user_ids &&
@@ -438,32 +444,6 @@ export function edit_locally(message: Message, request: LocalEditRequest): Messa
     return message;
 }
 
-export function update_topic_hash_to_contain_with_term(message: Message): void {
-    // If the current filter consists only of channel and topic terms
-    // and the incoming message belongs to same narrow, we try to
-    // add the `with` term to the narrow, and update the hash, to
-    // convert to permalink.
-    if (message.type !== "stream") {
-        return;
-    }
-    const filter = message_lists.current?.data.filter;
-
-    if (!filter?.has_exactly_channel_topic_operators()) {
-        return;
-    }
-
-    filter.adjust_with_operand_to_message(message.id);
-
-    // Adjust the URL to include the /with/ operator. We update the
-    // existing history entry, so that you don't have to hit Back
-    // twice to get to where you were before visiting the new topic.
-    //
-    // Since we're not changing the view, we want to preserve whatever
-    // scroll position StateData was already present.
-    const new_hash = hash_util.search_terms_to_hash(filter.terms());
-    browser_history.update_current_history_state_data({}, new_hash);
-}
-
 export let reify_message_id = (local_id: string, server_id: number): void => {
     const message = echo_state.get_message_waiting_for_id(local_id);
     echo_state.remove_message_from_waiting_for_id(local_id);
@@ -495,7 +475,6 @@ export let reify_message_id = (local_id: string, server_id: number): void => {
             message_id: message.id,
         });
     }
-    update_topic_hash_to_contain_with_term(message);
 };
 
 export function rewire_reify_message_id(value: typeof reify_message_id): void {
@@ -625,7 +604,7 @@ export function rewire_message_send_error(value: typeof message_send_error): voi
     message_send_error = value;
 }
 
-function abort_message(message: Message): void {
+export function abort_message(message: Message): void {
     // Update the rendered data first since it is most user visible.
     for (const msg_list of message_lists.all_rendered_message_lists()) {
         msg_list.remove_and_rerender([message.id]);
@@ -634,6 +613,8 @@ function abort_message(message: Message): void {
     for (const msg_list_data of message_lists.non_rendered_data()) {
         msg_list_data.remove([message.id]);
     }
+
+    delete_message_container.push(message);
 }
 
 export function display_slow_send_loading_spinner(message: Message): void {
@@ -651,12 +632,16 @@ export function display_slow_send_loading_spinner(message: Message): void {
 export function initialize({
     on_send_message_success,
     send_message,
+    remove_failed_message, 
 }: {
     on_send_message_success: (request: Message, data: PostMessageAPIData) => void;
     send_message: (
         request: Message,
         on_success: (raw_data: unknown) => void,
         error: (response: string, _server_error_code: string) => void,
+    ) => void;
+    remove_failed_message: (
+        message: Message,
     ) => void;
 }): void {
     function on_failed_action(
@@ -667,6 +652,7 @@ export function initialize({
             {
                 on_send_message_success,
                 send_message,
+                remove_failed_message,
             }: {
                 on_send_message_success: (request: Message, data: PostMessageAPIData) => void;
                 send_message: (
@@ -674,6 +660,7 @@ export function initialize({
                     on_success: (raw_data: unknown) => void,
                     error: (response: string, _server_error_code: string) => void,
                 ) => void;
+                remove_failed_message: (message: Message) => void,
             },
         ) => void,
     ): void {
@@ -691,7 +678,7 @@ export function initialize({
                 );
                 return;
             }
-            callback(message, $row, {on_send_message_success, send_message});
+            callback(message, $row, {on_send_message_success, send_message, remove_failed_message});
         });
     }
 
